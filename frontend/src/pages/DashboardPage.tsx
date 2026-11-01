@@ -1,42 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Users,
-  Building2,
-  BedDouble,
-  CreditCard,
-  AlertTriangle,
-  RefreshCw,
-  Building,
-  CheckCircle2,
-  AlertCircle
-} from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend
-} from 'recharts';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import {
-  DashboardSummary,
-  HostelSummary,
-  DashboardAnalytics,
-  RecentActivity
-} from '../types';
-import { MetricCard, Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Badge, getStatusBadgeVariant } from '../components/ui/Badge';
-import { OccupancyBar } from '../components/ui/OccupancyBar';
+import { DashboardSummary, HostelSummary, RecentActivity } from '../types';
 
 export const DashboardPage: React.FC = () => {
-  const navigate = useNavigate();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [hostels, setHostels] = useState<HostelSummary[]>([]);
-  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [activity, setActivity] = useState<RecentActivity | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +14,13 @@ export const DashboardPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [sumRes, hostRes, anaRes, actRes] = await Promise.all([
+      const [sumRes, hostRes, actRes] = await Promise.all([
         api.getDashboardSummary(),
         api.getDashboardHostels(),
-        api.getDashboardAnalytics(),
         api.getRecentActivity(),
       ]);
       setSummary(sumRes);
       setHostels(hostRes);
-      setAnalytics(anaRes);
       setActivity(actRes);
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard data from backend');
@@ -68,399 +35,226 @@ export const DashboardPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-6 bg-gray-100 rounded w-48" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-20 bg-gray-100 rounded border border-gray-200" />
-          ))}
-        </div>
-        <div className="h-64 bg-gray-100 rounded border border-gray-200" />
+      <div className="py-8 text-center text-sm text-gray-500">
+        Loading dashboard data from database...
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6 bg-white border border-red-200 rounded text-center">
-        <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
-        <h3 className="text-base font-bold text-gray-900">Backend Connection Error</h3>
-        <p className="text-xs text-gray-600 max-w-md mx-auto mt-1 mb-3">
-          {error}
-        </p>
-        <div className="flex justify-center gap-2">
-          <Button size="sm" onClick={fetchDashboardData} icon={<RefreshCw className="w-3.5 h-3.5" />}>
-            Retry
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => navigate('/settings')}>
-            Settings
-          </Button>
-        </div>
+      <div className="p-4 bg-white border border-red-300 rounded text-sm text-red-700">
+        <p className="font-semibold">Backend Connection Error</p>
+        <p className="text-xs mt-1 text-gray-600">{error}</p>
+        <button
+          onClick={fetchDashboardData}
+          className="mt-3 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Clean Academic Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-200 pb-4">
+      {/* Page Title Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-300 gap-2">
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl font-bold tracking-tight text-gray-900">
-              Hostel Management Dashboard
-            </h2>
-            <Badge variant="info" size="sm">
-              BACSE202 DA3
-            </Badge>
-          </div>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Digital Assignment 3 — BACSE202 Database Systems • VIT Chennai • Ganga, Yamuna & Cauvery Hostels
+          <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
+          <p className="text-xs text-gray-500">
+            System overview and hostel occupancy metrics
           </p>
         </div>
-
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={fetchDashboardData}
-            icon={<RefreshCw className="w-3.5 h-3.5" />}
+            className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
           >
             Refresh
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => navigate('/allocations')}
-            icon={<BedDouble className="w-3.5 h-3.5" />}
+          </button>
+          <Link
+            to="/allocations"
+            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
           >
-            Allocate Room
-          </Button>
+            New Allocation
+          </Link>
         </div>
       </div>
 
-      {/* 1. Summary Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        <MetricCard
-          title="Total Students"
-          value={summary?.totalStudents ?? 0}
-          subtitle="Enrolled residents"
-          icon={<Users className="w-4 h-4 text-blue-600" />}
-          iconBg="bg-blue-50"
-          onClick={() => navigate('/students')}
-        />
-
-        <MetricCard
-          title="Room Occupancy"
-          value={`${summary?.occupancyPercentage ?? 0}%`}
-          subtitle={`${summary?.occupiedBeds ?? 0} of ${summary?.totalCapacity ?? 0} beds`}
-          icon={<BedDouble className="w-4 h-4 text-green-700" />}
-          iconBg="bg-green-50"
-          onClick={() => navigate('/hostels-rooms')}
-        />
-
-        <MetricCard
-          title="Available Beds"
-          value={summary?.availableBeds ?? 0}
-          subtitle={`${summary?.totalRooms ?? 0} rooms registered`}
-          icon={<Building2 className="w-4 h-4 text-gray-700" />}
-          iconBg="bg-gray-100"
-          onClick={() => navigate('/hostels-rooms')}
-        />
-
-        <MetricCard
-          title="Pending Fees"
-          value={`₹${(summary?.pendingFees ?? 0).toLocaleString('en-IN')}`}
-          subtitle={`₹${(summary?.totalCollected ?? 0).toLocaleString('en-IN')} collected`}
-          icon={<CreditCard className="w-4 h-4 text-amber-700" />}
-          iconBg="bg-amber-50"
-          onClick={() => navigate('/payments')}
-        />
-
-        <MetricCard
-          title="Open Complaints"
-          value={summary?.openComplaints ?? 0}
-          subtitle={`${summary?.openMaintenance ?? 0} maintenance tasks`}
-          icon={<AlertTriangle className="w-4 h-4 text-red-700" />}
-          iconBg="bg-red-50"
-          onClick={() => navigate('/complaints')}
-        />
-      </div>
-
-      {/* 2. Hostels Capacity Table */}
-      <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">
-              Hostel Property & Capacity Status
-            </h3>
-            <p className="text-xs text-gray-500">
-              Overview of residential buildings, block counts, and live capacity
-            </p>
+      {/* 4 Simple Rectangular Stat Blocks */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-4 bg-white border border-gray-300 rounded">
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Total Students
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/hostels-rooms')}
-          >
-            Manage Rooms
-          </Button>
+          <div className="text-2xl font-bold text-gray-900 mt-1">
+            {summary?.totalStudents ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">Enrolled in system</div>
         </div>
 
+        <div className="p-4 bg-white border border-gray-300 rounded">
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Total Rooms
+          </div>
+          <div className="text-2xl font-bold text-gray-900 mt-1">
+            {summary?.totalRooms ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">Across all blocks</div>
+        </div>
+
+        <div className="p-4 bg-white border border-gray-300 rounded">
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Occupied Beds
+          </div>
+          <div className="text-2xl font-bold text-blue-700 mt-1">
+            {summary?.occupiedBeds ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            {summary?.occupancyPercentage ?? 0}% occupancy
+          </div>
+        </div>
+
+        <div className="p-4 bg-white border border-gray-300 rounded">
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Available Beds
+          </div>
+          <div className="text-2xl font-bold text-green-700 mt-1">
+            {summary?.availableBeds ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">Vacant for allocation</div>
+        </div>
+      </div>
+
+      {/* Hostel Overview Table */}
+      <div className="bg-white border border-gray-300 rounded">
+        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-300 flex items-center justify-between">
+          <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+            Hostel Overview
+          </h2>
+          <Link
+            to="/rooms"
+            className="text-xs text-blue-600 hover:text-blue-800 underline"
+          >
+            View All Rooms
+          </Link>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/50 text-gray-600 font-semibold">
-                <th className="py-2.5 px-3">Hostel</th>
-                <th className="py-2.5 px-3">Type</th>
-                <th className="py-2.5 px-3">Warden</th>
-                <th className="py-2.5 px-3 text-center">Blocks</th>
-                <th className="py-2.5 px-3 text-center">Rooms</th>
-                <th className="py-2.5 px-3">Bed Capacity</th>
-                <th className="py-2.5 px-3 text-right">Action</th>
+              <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 font-semibold">
+                <th className="py-2.5 px-3 border-r border-gray-300">Hostel Name</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Type</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 text-center">Rooms</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 text-center">Bed Capacity</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 text-center">Occupied Beds</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 text-center">Available Beds</th>
+                <th className="py-2.5 px-3 text-center">Occupancy %</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-200">
               {hostels.map((h) => (
-                <tr key={h.hostelId} className="hover:bg-gray-50/70">
-                  <td className="py-2.5 px-3 font-semibold text-gray-900">
+                <tr key={h.hostelId} className="hover:bg-gray-50">
+                  <td className="py-2 px-3 font-semibold text-gray-900 border-r border-gray-200">
                     {h.hostelName}
                   </td>
-                  <td className="py-2.5 px-3">
-                    <Badge variant={h.hostelType === 'Boys' ? 'info' : 'sage'} size="sm">
-                      {h.hostelType}
-                    </Badge>
+                  <td className="py-2 px-3 text-gray-600 border-r border-gray-200">
+                    {h.hostelType}
                   </td>
-                  <td className="py-2.5 px-3 text-gray-600">
-                    {h.wardenName || 'Not Assigned'}
-                  </td>
-                  <td className="py-2.5 px-3 text-center font-medium text-gray-800">
-                    {h.blockCount}
-                  </td>
-                  <td className="py-2.5 px-3 text-center font-medium text-gray-800">
+                  <td className="py-2 px-3 text-center text-gray-800 border-r border-gray-200">
                     {h.roomCount}
                   </td>
-                  <td className="py-2.5 px-3 w-48">
-                    <OccupancyBar
-                      occupied={h.occupiedBeds}
-                      total={h.totalCapacity}
-                      size="sm"
-                    />
+                  <td className="py-2 px-3 text-center text-gray-800 border-r border-gray-200">
+                    {h.totalCapacity}
                   </td>
-                  <td className="py-2.5 px-3 text-right">
-                    <button
-                      onClick={() => navigate(`/hostels-rooms?hostel=${h.hostelId}`)}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-800 underline"
-                    >
-                      View
-                    </button>
+                  <td className="py-2 px-3 text-center font-medium text-blue-700 border-r border-gray-200">
+                    {h.occupiedBeds}
+                  </td>
+                  <td className="py-2 px-3 text-center font-medium text-green-700 border-r border-gray-200">
+                    {h.availableBeds}
+                  </td>
+                  <td className="py-2 px-3 text-center font-medium text-gray-900">
+                    {h.occupancyPercentage}%
                   </td>
                 </tr>
               ))}
+              {hostels.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-gray-500">
+                    No hostels registered.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 3. Simple Analytics Summary */}
-      {analytics && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Hostel Occupancy Simple Bar Chart */}
-          <Card className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-3 border-b border-gray-200 pb-2">
-              <div>
-                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">
-                  Hostel Capacity Distribution
-                </h3>
-                <p className="text-xs text-gray-500">
-                  Occupied vs available student capacity
-                </p>
-              </div>
-              <span className="text-[11px] text-gray-500">
-                Database Records
-              </span>
-            </div>
-
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={analytics.hostelOccupancy}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
-                >
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: '4px',
-                      border: '1px solid #E5E7EB',
-                      fontSize: '11px',
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                  <Bar dataKey="occupied" name="Occupied Beds" fill="#2563EB" />
-                  <Bar dataKey="available" name="Available Beds" fill="#E2E8F0" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          {/* Simple Financial Summary Card */}
-          <Card>
-            <div className="mb-3 border-b border-gray-200 pb-2">
-              <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">
-                Fee Collection Summary
-              </h3>
-              <p className="text-xs text-gray-500">
-                Student fee status
-              </p>
-            </div>
-
-            <div className="space-y-3 py-2 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded bg-green-50 border border-green-200">
-                <span className="text-green-800 font-medium">Total Collected:</span>
-                <span className="font-bold text-green-900 text-sm">
-                  ₹{(summary?.totalCollected || 0).toLocaleString('en-IN')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded bg-amber-50 border border-amber-200">
-                <span className="text-amber-800 font-medium">Pending Dues:</span>
-                <span className="font-bold text-amber-900 text-sm">
-                  ₹{(summary?.pendingFees || 0).toLocaleString('en-IN')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded bg-gray-50 border border-gray-200">
-                <span className="text-gray-700 font-medium">Total Ledger:</span>
-                <span className="font-bold text-gray-900 text-sm">
-                  ₹{((summary?.totalCollected || 0) + (summary?.pendingFees || 0)).toLocaleString('en-IN')}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-3 pt-3 border-t border-gray-200 text-center">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-xs"
-                onClick={() => navigate('/payments')}
-              >
-                View Payments Ledger
-              </Button>
-            </div>
-          </Card>
+      {/* Recent Allocations Table */}
+      <div className="bg-white border border-gray-300 rounded">
+        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-300 flex items-center justify-between">
+          <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+            Recent Allocations
+          </h2>
+          <Link
+            to="/allocations"
+            className="text-xs text-blue-600 hover:text-blue-800 underline"
+          >
+            Manage Allocations
+          </Link>
         </div>
-      )}
-
-      {/* 4. Operational Activity Tables */}
-      {activity && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Recent Allocations Table */}
-          <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-            <div className="px-3.5 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-              <div>
-                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">
-                  Recent Room Allocations
-                </h3>
-              </div>
-              <button
-                onClick={() => navigate('/allocations')}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
-              >
-                View All
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/50 text-gray-600 font-semibold">
-                    <th className="py-2 px-3">Student</th>
-                    <th className="py-2 px-3">Room</th>
-                    <th className="py-2 px-3">Date</th>
-                    <th className="py-2 px-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {activity.recentAllocations.map((a) => (
-                    <tr key={a.AllocationID} className="hover:bg-gray-50/50">
-                      <td className="py-2 px-3">
-                        <div className="font-medium text-gray-900">{a.StudentName}</div>
-                        <div className="text-[10px] text-gray-500">{a.RegNo}</div>
-                      </td>
-                      <td className="py-2 px-3 font-semibold text-gray-800">
-                        Room {a.RoomNumber}
-                      </td>
-                      <td className="py-2 px-3 text-gray-600">
-                        {a.AllocationDate}
-                      </td>
-                      <td className="py-2 px-3">
-                        <Badge variant="success" size="sm">
-                          {a.Status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Open Complaints Requiring Attention */}
-          <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-            <div className="px-3.5 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-              <div>
-                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">
-                  Complaints Requiring Attention
-                </h3>
-              </div>
-              <button
-                onClick={() => navigate('/complaints')}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
-              >
-                View Desk
-              </button>
-            </div>
-
-            <div className="divide-y divide-gray-100">
-              {activity.openComplaints.length === 0 ? (
-                <div className="py-6 text-center text-xs text-gray-500">
-                  <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-1" />
-                  No open complaints recorded.
-                </div>
-              ) : (
-                activity.openComplaints.map((c) => (
-                  <div key={c.ComplaintID} className="p-3 flex items-start justify-between gap-2 hover:bg-gray-50/50">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-xs text-gray-900">
-                          {c.ComplaintType}
-                        </span>
-                        <Badge variant={getStatusBadgeVariant(c.Priority)} size="sm">
-                          {c.Priority}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">
-                        {c.Description}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
-                        <span>{c.StudentName}</span>
-                        <span>•</span>
-                        <span>Room {c.RoomNumber}</span>
-                        <span>•</span>
-                        <span>{c.DateFiled}</span>
-                      </div>
-                    </div>
-                    <Badge variant={getStatusBadgeVariant(c.Status)} size="sm">
-                      {c.Status}
-                    </Badge>
-                  </div>
-                ))
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 font-semibold">
+                <th className="py-2.5 px-3 border-r border-gray-300">Student Name</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Reg No</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Room</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Allocation Date</th>
+                <th className="py-2.5 px-3 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {activity?.recentAllocations?.map((alloc) => (
+                <tr key={alloc.AllocationID} className="hover:bg-gray-50">
+                  <td className="py-2 px-3 font-medium text-gray-900 border-r border-gray-200">
+                    {alloc.StudentName}
+                  </td>
+                  <td className="py-2 px-3 font-mono text-gray-600 border-r border-gray-200">
+                    {alloc.RegNo}
+                  </td>
+                  <td className="py-2 px-3 text-gray-700 border-r border-gray-200">
+                    Room {alloc.RoomNumber}
+                  </td>
+                  <td className="py-2 px-3 text-gray-600 border-r border-gray-200">
+                    {alloc.AllocationDate}
+                  </td>
+                  <td className="py-2 px-3 text-center">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium border ${
+                        alloc.Status === 'Active'
+                          ? 'bg-green-50 text-green-800 border-green-300'
+                          : 'bg-gray-100 text-gray-700 border-gray-300'
+                      }`}
+                    >
+                      {alloc.Status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {(!activity?.recentAllocations || activity.recentAllocations.length === 0) && (
+                <tr>
+                  <td colSpan={5} className="py-4 text-center text-gray-500">
+                    No recent allocations recorded.
+                  </td>
+                </tr>
               )}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
     </div>
   );
 };
-
+export default DashboardPage;

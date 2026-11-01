@@ -1,101 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Users,
-  Search,
-  Plus,
-  Filter,
-  MoreVertical,
-  Edit2,
-  Trash2,
-  Eye,
-  Mail,
-  Phone,
-  Building,
-  KeyRound,
-  AlertCircle,
-  CheckCircle,
-  FileText,
-  Calendar,
-  CreditCard
-} from 'lucide-react';
-import { api, ApiError } from '../api/client';
-import { Student, Hostel } from '../types';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Badge, getStatusBadgeVariant } from '../components/ui/Badge';
-import { SlideOver } from '../components/ui/SlideOver';
-import { Modal } from '../components/ui/Modal';
-import { useToast } from '../components/ui/Toast';
+import { api } from '../api/client';
+import { Student } from '../types';
 
 export const StudentsPage: React.FC = () => {
-  const toast = useToast();
   const [students, setStudents] = useState<Student[]>([]);
-  const [hostels, setHostels] = useState<Hostel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
   const [deptFilter, setDeptFilter] = useState('All');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Slide-over states
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isViewOpen, setIsViewOpen] = useState(false);
+  // Modal states
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [fullStudentDetail, setFullStudentDetail] = useState<Student | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Delete modal state
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Form states
+  // Form State
   const [formData, setFormData] = useState({
     regNo: '',
     name: '',
     gender: 'M',
     dob: '2005-01-01',
     department: 'Computer Science',
-    year: 2,
+    year: 1,
     contactNumber: '',
     email: '',
     admissionDate: new Date().toISOString().split('T')[0],
   });
-  const [formError, setFormError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
 
   const fetchStudents = async () => {
     setIsLoading(true);
+    setErrorMessage(null);
     try {
       const data = await api.getStudents({
         search: search.trim() || undefined,
-        status: statusFilter !== 'All' ? statusFilter : undefined,
         department: deptFilter !== 'All' ? deptFilter : undefined,
       });
       setStudents(data);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to fetch students');
+      setErrorMessage(err.message || 'Failed to fetch student records');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    const fetchInitial = async () => {
-      try {
-        const [stData, hData] = await Promise.all([
-          api.getStudents(),
-          api.getHostels(),
-        ]);
-        setStudents(stData);
-        setHostels(hData);
-      } catch (err: any) {
-        toast.error('Could not connect to backend service.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchInitial();
-  }, []);
+    fetchStudents();
+  }, [deptFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,645 +64,468 @@ export const StudentsPage: React.FC = () => {
       dob: '2005-01-01',
       department: 'Computer Science',
       year: 1,
-      contactNumber: '+91 ',
+      contactNumber: '',
       email: '',
       admissionDate: new Date().toISOString().split('T')[0],
     });
     setFormError(null);
-    setIsAddOpen(true);
+    setIsAddModalOpen(true);
   };
 
-  const handleOpenEdit = (student: Student) => {
-    setSelectedStudent(student);
+  const handleOpenEdit = (st: Student) => {
+    setSelectedStudent(st);
     setFormData({
-      regNo: student.RegNo,
-      name: student.Name,
-      gender: student.Gender,
-      dob: student.DOB,
-      department: student.Department,
-      year: student.Year,
-      contactNumber: student.ContactNumber,
-      email: student.Email,
-      admissionDate: student.AdmissionDate,
+      regNo: st.RegNo,
+      name: st.Name,
+      gender: st.Gender || 'M',
+      dob: st.DOB || '2005-01-01',
+      department: st.Department,
+      year: st.Year,
+      contactNumber: st.ContactNumber,
+      email: st.Email,
+      admissionDate: st.AdmissionDate || new Date().toISOString().split('T')[0],
     });
     setFormError(null);
-    setIsEditOpen(true);
+    setIsEditModalOpen(true);
   };
 
-  const handleOpenView = async (student: Student) => {
-    setSelectedStudent(student);
-    setIsViewOpen(true);
-    try {
-      const full = await api.getStudent(student.StudentID);
-      setFullStudentDetail(full);
-    } catch (err: any) {
-      toast.error('Failed to load student complete history');
-    }
+  const handleOpenDelete = (st: Student) => {
+    setSelectedStudent(st);
+    setFormError(null);
+    setIsDeleteModalOpen(true);
   };
 
   const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
-    // Basic Validation
-    if (!formData.regNo.trim() || !formData.name.trim() || !formData.email.trim()) {
-      setFormError('Registration number, Full name, and Email are required.');
+    if (!formData.name.trim() || !formData.regNo.trim() || !formData.email.trim()) {
+      setFormError('Please enter Name, Registration Number, and Email.');
       return;
     }
 
-    setIsSaving(true);
+    setIsSubmitting(true);
     try {
-      if (isAddOpen) {
+      if (isAddModalOpen) {
         await api.createStudent(formData);
-        toast.success(`Student ${formData.name} registered successfully`);
-        setIsAddOpen(false);
-      } else if (isEditOpen && selectedStudent) {
-        await api.updateStudent(selectedStudent.StudentID, formData);
-        toast.success(`Student ${formData.name} updated successfully`);
-        setIsEditOpen(false);
+        setSuccessMessage(`Student ${formData.name} added successfully.`);
+        setIsAddModalOpen(false);
+      } else if (isEditModalOpen && selectedStudent) {
+        await api.updateStudent(selectedStudent.StudentID, {
+          name: formData.name,
+          gender: formData.gender,
+          department: formData.department,
+          year: Number(formData.year),
+          contactNumber: formData.contactNumber,
+          email: formData.email,
+        });
+        setSuccessMessage(`Student ${formData.name} updated successfully.`);
+        setIsEditModalOpen(false);
       }
       fetchStudents();
+      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      setFormError(err.message || 'Failed to save student record');
+      setFormError(err.message || 'Operation failed on server');
     } finally {
-      setIsSaving(false);
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteConfirm = async () => {
-    if (!studentToDelete) return;
-    setIsDeleting(true);
+    if (!selectedStudent) return;
+    setIsSubmitting(true);
+    setFormError(null);
     try {
-      await api.deleteStudent(studentToDelete.StudentID);
-      toast.success(`Student ${studentToDelete.Name} removed from registry`);
-      setDeleteModalOpen(false);
+      await api.deleteStudent(selectedStudent.StudentID);
+      setSuccessMessage(`Student ${selectedStudent.Name} deleted.`);
+      setIsDeleteModalOpen(false);
       fetchStudents();
+      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete student');
+      setFormError(err.message || 'Failed to delete student');
     } finally {
-      setIsDeleting(false);
-      setStudentToDelete(null);
+      setIsSubmitting(false);
     }
   };
 
+  const departments = [
+    'All',
+    'Computer Science',
+    'Information Technology',
+    'Electronics & Communication',
+    'Mechanical Engineering',
+    'Civil Engineering',
+    'Electrical & Electronics',
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* Title & Add Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-300 gap-2">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-content-primary">
-              Student Directory
-            </h2>
-            <Badge variant="neutral" size="sm">
-              {students.length} Records
-            </Badge>
-          </div>
-          <p className="text-xs text-content-secondary mt-1">
-            Manage student registrations, academic departments, and hostel room assignments.
+          <h1 className="text-lg font-bold text-gray-900">Students</h1>
+          <p className="text-xs text-gray-500">
+            View, add, edit, and delete student records ({students.length} total)
           </p>
         </div>
-
-        <Button onClick={handleOpenAdd} icon={<Plus className="w-4 h-4" />}>
-          Register Student
-        </Button>
+        <button
+          onClick={handleOpenAdd}
+          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700"
+        >
+          + Add Student
+        </button>
       </div>
 
-      {/* Filters and Search Bar */}
-      <Card className="p-4">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name, registration number, or email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded border border-gray-300 text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
-            />
-          </div>
+      {/* Notifications */}
+      {successMessage && (
+        <div className="p-2.5 bg-green-50 border border-green-300 text-green-800 text-xs rounded">
+          {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="p-2.5 bg-red-50 border border-red-300 text-red-800 text-xs rounded">
+          {errorMessage}
+        </div>
+      )}
 
-          <div className="flex items-center gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="py-1.5 px-2.5 text-xs rounded border border-gray-300 text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+      {/* Filter and Search Bar */}
+      <div className="p-3 bg-white border border-gray-300 rounded flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <form onSubmit={handleSearchSubmit} className="flex gap-2 flex-1 max-w-md">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, reg no, department..."
+            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-blue-600"
+          />
+          <button
+            type="submit"
+            className="px-3 py-1.5 bg-gray-100 border border-gray-300 text-xs text-gray-700 rounded hover:bg-gray-200"
+          >
+            Search
+          </button>
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('');
+                api.getStudents().then(setStudents);
+              }}
+              className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
             >
-              <option value="All">All Allocation Status</option>
-              <option value="Allocated">Allocated</option>
-              <option value="Unallocated">Unallocated</option>
-            </select>
-
-            <select
-              value={deptFilter}
-              onChange={(e) => setDeptFilter(e.target.value)}
-              className="py-1.5 px-2.5 text-xs rounded border border-gray-300 text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="All">All Departments</option>
-              <option value="Computer Science">Computer Science</option>
-              <option value="Information Tech">Information Tech</option>
-              <option value="Mechanical Eng">Mechanical Eng</option>
-              <option value="Electrical Eng">Electrical Eng</option>
-            </select>
-
-            <Button type="submit" variant="secondary" size="sm">
-              Apply
-            </Button>
-          </div>
+              Clear
+            </button>
+          )}
         </form>
-      </Card>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-600 font-medium">Department:</label>
+          <select
+            value={deptFilter}
+            onChange={(e) => setDeptFilter(e.target.value)}
+            className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-blue-600 bg-white"
+          >
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {/* Students Data Table */}
-      <Card className="p-0 overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center text-xs text-content-secondary animate-pulse">
-            Loading student records from database...
-          </div>
-        ) : students.length === 0 ? (
-          <div className="p-12 text-center">
-            <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-content-primary">No students found</h3>
-            <p className="text-xs text-content-secondary mt-1 mb-4">
-              Try adjusting your search query or department filter.
-            </p>
-            <Button size="sm" onClick={handleOpenAdd} icon={<Plus className="w-4 h-4" />}>
-              Add First Student
-            </Button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-surface-border bg-slate-50/70 text-content-secondary uppercase text-[10px] tracking-wider font-semibold">
-                  <th className="py-3 px-4">Student</th>
-                  <th className="py-3 px-4">Program & Year</th>
-                  <th className="py-3 px-4">Contact Info</th>
-                  <th className="py-3 px-4">Hostel & Room</th>
-                  <th className="py-3 px-4">Allocation</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+      <div className="bg-white border border-gray-300 rounded overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 font-semibold">
+                <th className="py-2.5 px-3 border-r border-gray-300 w-12 text-center">ID</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Reg No</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Name</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 text-center">Gender</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Department</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 text-center">Year</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Contact</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Allocated Room</th>
+                <th className="py-2.5 px-3 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={9} className="py-6 text-center text-gray-500">
+                    Loading student records from Neo4j database...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {students.map((student) => {
-                  const isAllocated = student.RoomNumber && student.AllocationStatus === 'Active';
-                  return (
-                    <tr key={student.StudentID} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center shrink-0 border border-slate-200">
-                            {student.Name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-content-primary text-xs flex items-center gap-1.5">
-                              {student.Name}
-                              <span className="text-[10px] text-slate-400 font-normal">
-                                ({student.Gender})
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-brand-blue font-mono">
-                              {student.RegNo}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="font-medium text-content-primary">
-                          {student.Department}
-                        </div>
-                        <div className="text-[11px] text-content-secondary">
-                          Year {student.Year}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="text-content-primary flex items-center gap-1.5">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          {student.ContactNumber}
-                        </div>
-                        <div className="text-content-secondary text-[11px] flex items-center gap-1.5 mt-0.5">
-                          <Mail className="w-3 h-3 text-slate-400" />
-                          {student.Email}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {isAllocated ? (
-                          <div>
-                            <div className="font-semibold text-content-primary flex items-center gap-1">
-                              <KeyRound className="w-3 h-3 text-emerald-600" />
-                              Room {student.RoomNumber}
-                            </div>
-                            <div className="text-[10px] text-content-secondary">
-                              {student.BlockName} • {student.HostelName}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">Unassigned</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <Badge
-                          variant={isAllocated ? 'success' : 'neutral'}
-                          size="sm"
-                        >
-                          {isAllocated ? 'Allocated' : 'Unallocated'}
-                        </Badge>
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenView(student)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-brand-blue hover:bg-blue-50 transition-colors"
-                            title="View Student Dossier"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenEdit(student)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                            title="Edit Student Record"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setStudentToDelete(student);
-                              setDeleteModalOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Delete Student"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* ADD / EDIT STUDENT SLIDE-OVER */}
-      <SlideOver
-        isOpen={isAddOpen || isEditOpen}
-        onClose={() => {
-          setIsAddOpen(false);
-          setIsEditOpen(false);
-        }}
-        title={isAddOpen ? 'Register New Student' : 'Edit Student Details'}
-        subtitle={
-          isAddOpen
-            ? 'Enter personal, academic, and contact details for residential allocation.'
-            : `Updating information for ${selectedStudent?.Name} (${selectedStudent?.RegNo})`
-        }
-        footer={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setIsAddOpen(false);
-                setIsEditOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSaveStudent}
-              isLoading={isSaving}
-            >
-              {isAddOpen ? 'Register Student' : 'Save Changes'}
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleSaveStudent} className="space-y-4 text-xs">
-          {formError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{formError}</span>
-            </div>
-          )}
-
-          <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Registration Number *
-            </label>
-            <input
-              type="text"
-              required
-              disabled={isEditOpen}
-              placeholder="e.g. 24BCE1099"
-              value={formData.regNo}
-              onChange={(e) => setFormData({ ...formData, regNo: e.target.value.toUpperCase() })}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30 focus:border-brand-blue uppercase disabled:bg-slate-100"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Full Legal Name *
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Aravindhan Subramanian"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30 focus:border-brand-blue"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-content-primary mb-1">
-                Gender *
-              </label>
-              <select
-                value={formData.gender}
-                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-              >
-                <option value="M">Male (M)</option>
-                <option value="F">Female (F)</option>
-                <option value="O">Other (O)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-content-primary mb-1">
-                Date of Birth *
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.dob}
-                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-content-primary mb-1">
-                Academic Department *
-              </label>
-              <select
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-              >
-                <option value="Computer Science">Computer Science</option>
-                <option value="Information Tech">Information Tech</option>
-                <option value="Mechanical Eng">Mechanical Eng</option>
-                <option value="Electrical Eng">Electrical Eng</option>
-                <option value="Civil Engineering">Civil Engineering</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-content-primary mb-1">
-                Year of Study *
-              </label>
-              <select
-                value={formData.year}
-                onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })}
-                className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-              >
-                <option value={1}>1st Year (Freshman)</option>
-                <option value={2}>2nd Year (Sophomore)</option>
-                <option value={3}>3rd Year (Junior)</option>
-                <option value={4}>4th Year (Senior)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Contact Mobile Number *
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="+91 98765 43210"
-              value={formData.contactNumber}
-              onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Institutional Email *
-            </label>
-            <input
-              type="email"
-              required
-              placeholder="student@college.edu"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Hostel Admission Date *
-            </label>
-            <input
-              type="date"
-              required
-              value={formData.admissionDate}
-              onChange={(e) => setFormData({ ...formData, admissionDate: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-            />
-          </div>
-        </form>
-      </SlideOver>
-
-      {/* VIEW STUDENT DETAILS DOSSIER */}
-      <SlideOver
-        isOpen={isViewOpen}
-        onClose={() => {
-          setIsViewOpen(false);
-          setFullStudentDetail(null);
-        }}
-        title="Student Residential Dossier"
-        subtitle={fullStudentDetail ? `${fullStudentDetail.Name} (${fullStudentDetail.RegNo})` : 'Loading...'}
-        width="lg"
-      >
-        {fullStudentDetail ? (
-          <div className="space-y-6 text-xs">
-            {/* Primary Details Card */}
-            <div className="p-4 bg-slate-50 border border-surface-border rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-content-primary">
-                  {fullStudentDetail.Name}
-                </span>
-                <Badge
-                  variant={fullStudentDetail.AllocationStatus === 'Active' ? 'success' : 'neutral'}
-                >
-                  {fullStudentDetail.AllocationStatus || 'Unallocated'}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-content-secondary pt-2 border-t border-slate-200">
-                <div>
-                  <span className="font-semibold text-content-primary">Reg No:</span>{' '}
-                  <span className="font-mono">{fullStudentDetail.RegNo}</span>
-                </div>
-                <div>
-                  <span className="font-semibold text-content-primary">Gender:</span>{' '}
-                  {fullStudentDetail.Gender === 'M' ? 'Male' : fullStudentDetail.Gender === 'F' ? 'Female' : 'Other'}
-                </div>
-                <div>
-                  <span className="font-semibold text-content-primary">Department:</span>{' '}
-                  {fullStudentDetail.Department}
-                </div>
-                <div>
-                  <span className="font-semibold text-content-primary">Year:</span> Year{' '}
-                  {fullStudentDetail.Year}
-                </div>
-                <div>
-                  <span className="font-semibold text-content-primary">Mobile:</span>{' '}
-                  {fullStudentDetail.ContactNumber}
-                </div>
-                <div>
-                  <span className="font-semibold text-content-primary">Email:</span>{' '}
-                  {fullStudentDetail.Email}
-                </div>
-              </div>
-            </div>
-
-            {/* Room Allocation Info */}
-            <div className="border border-surface-border rounded-xl p-4">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-content-primary mb-2 flex items-center gap-1.5">
-                <KeyRound className="w-4 h-4 text-brand-blue" />
-                Current Room Allocation
-              </h4>
-              {fullStudentDetail.RoomNumber ? (
-                <div className="space-y-1 text-content-secondary">
-                  <p>
-                    <span className="font-semibold text-content-primary">Room:</span> Room{' '}
-                    {fullStudentDetail.RoomNumber} ({fullStudentDetail.RoomType || 'Single'})
-                  </p>
-                  <p>
-                    <span className="font-semibold text-content-primary">Block & Hostel:</span>{' '}
-                    {fullStudentDetail.BlockName} • {fullStudentDetail.HostelName}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-content-primary">Allocated Date:</span>{' '}
-                    {fullStudentDetail.AllocationDate}
-                  </p>
-                </div>
+              ) : students.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-6 text-center text-gray-500">
+                    No student records found matching the criteria.
+                  </td>
+                </tr>
               ) : (
-                <p className="text-slate-400 italic">No active room allocation found.</p>
-              )}
-            </div>
-
-            {/* Emergency Contacts */}
-            <div className="border border-surface-border rounded-xl p-4">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-content-primary mb-2">
-                Emergency Contacts
-              </h4>
-              {fullStudentDetail.emergencyContacts && fullStudentDetail.emergencyContacts.length > 0 ? (
-                <div className="space-y-2">
-                  {fullStudentDetail.emergencyContacts.map((c) => (
-                    <div key={c.ContactID} className="p-2.5 bg-slate-50 rounded-lg flex items-center justify-between">
-                      <div>
-                        <span className="font-semibold text-content-primary">{c.Name}</span>{' '}
-                        <span className="text-slate-500">({c.Relationship})</span>
-                        <div className="text-[11px] text-content-secondary mt-0.5">{c.PhoneNumber}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-400 italic">No emergency contact on file.</p>
-              )}
-            </div>
-
-            {/* Payment Transactions */}
-            <div className="border border-surface-border rounded-xl p-4">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-content-primary mb-2 flex items-center gap-1.5">
-                <CreditCard className="w-4 h-4 text-emerald-600" />
-                Fee Payment Records
-              </h4>
-              {fullStudentDetail.payments && fullStudentDetail.payments.length > 0 ? (
-                <div className="divide-y divide-slate-100">
-                  {fullStudentDetail.payments.map((p) => (
-                    <div key={p.PaymentID} className="py-2 flex items-center justify-between">
-                      <div>
-                        <span className="font-semibold text-content-primary">{p.PaymentType}</span>
-                        <div className="text-[10px] text-content-secondary">
-                          {p.PaymentDate} • {p.ReceiptNumber}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-bold text-content-primary">
-                          ₹{p.Amount.toLocaleString('en-IN')}
+                students.map((st) => (
+                  <tr key={st.StudentID} className="hover:bg-gray-50">
+                    <td className="py-2 px-3 text-center font-mono text-gray-500 border-r border-gray-200">
+                      {st.StudentID}
+                    </td>
+                    <td className="py-2 px-3 font-mono font-medium text-blue-700 border-r border-gray-200">
+                      {st.RegNo}
+                    </td>
+                    <td className="py-2 px-3 font-medium text-gray-900 border-r border-gray-200">
+                      {st.Name}
+                    </td>
+                    <td className="py-2 px-3 text-center text-gray-600 border-r border-gray-200">
+                      {st.Gender}
+                    </td>
+                    <td className="py-2 px-3 text-gray-700 border-r border-gray-200">
+                      {st.Department}
+                    </td>
+                    <td className="py-2 px-3 text-center text-gray-700 border-r border-gray-200">
+                      {st.Year}
+                    </td>
+                    <td className="py-2 px-3 text-gray-600 border-r border-gray-200">
+                      {st.ContactNumber}
+                    </td>
+                    <td className="py-2 px-3 border-r border-gray-200">
+                      {st.RoomNumber ? (
+                        <span className="text-gray-900 font-medium">
+                          Room {st.RoomNumber} ({st.HostelName})
                         </span>
-                        <div>
-                          <Badge variant={p.Status === 'Completed' ? 'success' : 'warning'} size="sm">
-                            {p.Status}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-400 italic">No payment history recorded.</p>
+                      ) : (
+                        <span className="text-gray-400 italic">Unallocated</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-center space-x-2">
+                      <button
+                        onClick={() => handleOpenEdit(st)}
+                        className="text-blue-600 hover:text-blue-800 font-medium underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleOpenDelete(st)}
+                        className="text-red-600 hover:text-red-800 font-medium underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
               )}
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-slate-400">Loading details...</div>
-        )}
-      </SlideOver>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      {/* DELETE CONFIRMATION MODAL */}
-      <Modal
-        isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        title="Confirm Student Deletion"
-        maxWidth="sm"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setDeleteModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleDeleteConfirm}
-              isLoading={isDeleting}
-            >
-              Delete Student
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 text-xs">
-          <p className="text-content-secondary">
-            Are you sure you want to delete{' '}
-            <strong className="text-content-primary">{studentToDelete?.Name}</strong> (
-            {studentToDelete?.RegNo})?
-          </p>
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px]">
-            <strong>Warning:</strong> Any active room allocation bed occupied by this student will be
-            automatically released and marked available.
+      {/* Add / Edit Student Modal */}
+      {(isAddModalOpen || isEditModalOpen) && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-400 rounded max-w-md w-full p-5 space-y-4 shadow-sm">
+            <div className="border-b border-gray-300 pb-2 flex justify-between items-center">
+              <h2 className="text-sm font-bold text-gray-900">
+                {isAddModalOpen ? 'Add New Student' : 'Edit Student Record'}
+              </h2>
+              <button
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                  setIsEditModalOpen(false);
+                }}
+                className="text-gray-500 hover:text-gray-800 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {formError && (
+              <div className="p-2 bg-red-50 border border-red-300 text-red-700 text-xs rounded">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveStudent} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    Registration No <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    disabled={isEditModalOpen}
+                    value={formData.regNo}
+                    onChange={(e) => setFormData({ ...formData, regNo: e.target.value })}
+                    placeholder="e.g. 24BCE1001"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded disabled:bg-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    Gender <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded bg-white"
+                  >
+                    <option value="M">Male (M)</option>
+                    <option value="F">Female (F)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Student Full Name"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    Department <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded bg-white"
+                  >
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Information Technology">Information Technology</option>
+                    <option value="Electronics & Communication">Electronics & Communication</option>
+                    <option value="Mechanical Engineering">Mechanical Engineering</option>
+                    <option value="Civil Engineering">Civil Engineering</option>
+                    <option value="Electrical & Electronics">Electrical & Electronics</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    Academic Year <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.year}
+                    onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded bg-white"
+                  >
+                    <option value={1}>Year 1</option>
+                    <option value={2}>Year 2</option>
+                    <option value={3}>Year 3</option>
+                    <option value={4}>Year 4</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">Contact Number</label>
+                  <input
+                    type="text"
+                    value={formData.contactNumber}
+                    onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
+                    placeholder="+91 9876543210"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.dob}
+                    onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="student@vitstudent.ac.in"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded"
+                />
+              </div>
+
+              <div className="border-t border-gray-300 pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setIsEditModalOpen(false);
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Student'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </Modal>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && selectedStudent && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-400 rounded max-w-sm w-full p-4 space-y-3 shadow-sm">
+            <h2 className="text-sm font-bold text-gray-900 border-b border-gray-200 pb-2">
+              Confirm Student Deletion
+            </h2>
+
+            {formError ? (
+              <div className="p-2 bg-red-50 border border-red-300 text-red-700 text-xs rounded">
+                {formError}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-700">
+                Are you sure you want to delete student <strong>{selectedStudent.Name}</strong> (
+                {selectedStudent.RegNo})?
+              </p>
+            )}
+
+            <div className="border-t border-gray-200 pt-2 flex justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleDeleteConfirm}
+                className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+export default StudentsPage;

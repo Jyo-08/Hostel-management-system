@@ -1,49 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import {
-  KeyRound,
-  Plus,
-  Search,
-  Filter,
-  CheckCircle2,
-  Calendar,
-  Building,
-  User,
-  AlertCircle,
-  DoorOpen,
-  LogOut,
-  Clock
-} from 'lucide-react';
-import { api, ApiError } from '../api/client';
+import { api } from '../api/client';
 import { RoomAllocation, Student, Room } from '../types';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Badge, getStatusBadgeVariant } from '../components/ui/Badge';
-import { SlideOver } from '../components/ui/SlideOver';
-import { Modal } from '../components/ui/Modal';
-import { useToast } from '../components/ui/Toast';
 
 export const AllocationsPage: React.FC = () => {
-  const toast = useToast();
   const [allocations, setAllocations] = useState<RoomAllocation[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
 
-  // Allocation Drawer
-  const [isNewAllocOpen, setIsNewAllocOpen] = useState(false);
+  // Allocation form state
   const [selectedStudentId, setSelectedStudentId] = useState<number | ''>('');
   const [selectedRoomId, setSelectedRoomId] = useState<number | ''>('');
   const [allocationDate, setAllocationDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allocError, setAllocError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Vacate Modal
-  const [vacateModalOpen, setVacateModalOpen] = useState(false);
-  const [allocToVacate, setAllocToVacate] = useState<RoomAllocation | null>(null);
+  // Vacate modal state
+  const [vacateTarget, setVacateTarget] = useState<RoomAllocation | null>(null);
   const [isVacating, setIsVacating] = useState(false);
 
   const fetchAllocations = async () => {
@@ -52,24 +29,21 @@ export const AllocationsPage: React.FC = () => {
       const data = await api.getAllocations(statusFilter !== 'All' ? statusFilter : undefined);
       setAllocations(data);
     } catch (err: any) {
-      toast.error('Failed to load allocations');
+      setFormError('Failed to load allocations from server');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadDependencies = async () => {
+  const loadDropdownData = async () => {
     try {
       const [allStudents, allRooms] = await Promise.all([
         api.getStudents(),
         api.getRooms(),
       ]);
       setStudents(allStudents);
-      // Filter rooms that actually have capacity available
-      const freeRooms = allRooms.filter(
-        (r) => r.CurrentOccupancy < r.Capacity && r.Status !== 'Under Maintenance'
-      );
-      setAvailableRooms(freeRooms);
+      // Available rooms with at least 1 free bed and not under maintenance
+      setRooms(allRooms);
     } catch (err: any) {
       // non-blocking
     }
@@ -77,346 +51,311 @@ export const AllocationsPage: React.FC = () => {
 
   useEffect(() => {
     fetchAllocations();
-    loadDependencies();
   }, [statusFilter]);
 
-  const handleOpenNew = () => {
-    setSelectedStudentId('');
-    setSelectedRoomId('');
-    setAllocationDate(new Date().toISOString().split('T')[0]);
-    setAllocError(null);
-    loadDependencies();
-    setIsNewAllocOpen(true);
-  };
+  useEffect(() => {
+    loadDropdownData();
+  }, []);
 
-  const handleCreateAllocation = async (e: React.FormEvent) => {
+  const handleAllocate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAllocError(null);
+    setFormError(null);
 
     if (!selectedStudentId || !selectedRoomId) {
-      setAllocError('Please select both a student and an available room.');
+      setFormError('Please select both a student and a room.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const res = await api.createAllocation({
+      await api.createAllocation({
         studentId: Number(selectedStudentId),
         roomId: Number(selectedRoomId),
-        allocationDate,
+        allocationDate: allocationDate || new Date().toISOString().split('T')[0],
       });
-      toast.success(`Room assigned successfully (Allocation #${res.AllocationID})`);
-      setIsNewAllocOpen(false);
+      setSuccessMessage('Room allocated successfully.');
+      setSelectedStudentId('');
+      setSelectedRoomId('');
       fetchAllocations();
+      loadDropdownData();
+      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      setAllocError(err.message || 'Allocation failed');
+      setFormError(err.message || 'Failed to allocate room');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleVacateConfirm = async () => {
-    if (!allocToVacate) return;
+    if (!vacateTarget) return;
     setIsVacating(true);
+    setFormError(null);
     try {
-      await api.vacateAllocation(allocToVacate.AllocationID);
-      toast.success(`Allocation #${allocToVacate.AllocationID} marked as vacated. Bed is now available.`);
-      setVacateModalOpen(false);
+      await api.vacateAllocation(vacateTarget.AllocationID);
+      setSuccessMessage(`Room vacated for allocation #${vacateTarget.AllocationID}.`);
+      setVacateTarget(null);
       fetchAllocations();
+      loadDropdownData();
+      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to vacate room');
+      setFormError(err.message || 'Failed to vacate room');
     } finally {
       setIsVacating(false);
-      setAllocToVacate(null);
     }
   };
 
-  // Filtered allocations
-  const filtered = allocations.filter((a) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      a.StudentName?.toLowerCase().includes(q) ||
-      a.RegNo?.toLowerCase().includes(q) ||
-      a.RoomNumber?.toLowerCase().includes(q) ||
-      a.HostelName?.toLowerCase().includes(q)
-    );
-  });
+  // Rooms that have space
+  const availableRooms = rooms.filter(
+    (r) => r.CurrentOccupancy < r.Capacity && r.Status !== 'Under Maintenance'
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5">
+      {/* Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-300 gap-2">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-content-primary">
-              Room Allocations
-            </h2>
-            <Badge variant="neutral" size="sm">
-              {allocations.length} Active & Past
-            </Badge>
-          </div>
-          <p className="text-xs text-content-secondary mt-1">
-            Enforces bed-capacity constraints and maintains complete historical occupancy audit logs.
+          <h1 className="text-lg font-bold text-gray-900">Room Allocations</h1>
+          <p className="text-xs text-gray-500">
+            Allocate rooms to students and record room vacating in the Neo4j graph database
           </p>
         </div>
-
-        <Button onClick={handleOpenNew} icon={<Plus className="w-4 h-4" />}>
-          New Room Allocation
-        </Button>
+        <button
+          onClick={() => {
+            fetchAllocations();
+            loadDropdownData();
+          }}
+          className="px-3 py-1.5 bg-white border border-gray-300 text-xs text-gray-700 rounded hover:bg-gray-50"
+        >
+          Refresh
+        </button>
       </div>
 
-      {/* Toolbar */}
-      <Card className="p-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by student, registration number, or room..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded border border-gray-300 text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {['All', 'Active', 'Vacated'].map((st) => (
-              <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${
-                  statusFilter === st
-                    ? 'bg-blue-50 text-blue-700 border-blue-300 font-semibold'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
-          </div>
+      {/* Notifications */}
+      {successMessage && (
+        <div className="p-2.5 bg-green-50 border border-green-300 text-green-800 text-xs rounded">
+          {successMessage}
         </div>
-      </Card>
+      )}
+      {formError && (
+        <div className="p-2.5 bg-red-50 border border-red-300 text-red-800 text-xs rounded">
+          {formError}
+        </div>
+      )}
 
-      {/* Allocations Table */}
-      <Card className="p-0 overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center text-xs text-content-secondary animate-pulse">
-            Loading allocations from database...
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="p-12 text-center">
-            <KeyRound className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-content-primary">No allocations found</h3>
-            <p className="text-xs text-content-secondary mt-1 mb-4">
-              Allocate an available bed to a registered college resident.
-            </p>
-            <Button size="sm" onClick={handleOpenNew} icon={<Plus className="w-4 h-4" />}>
-              Create Allocation
-            </Button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-surface-border bg-slate-50/70 text-content-secondary uppercase text-[10px] tracking-wider font-semibold">
-                  <th className="py-3 px-4">Allocation ID</th>
-                  <th className="py-3 px-4">Student</th>
-                  <th className="py-3 px-4">Assigned Room</th>
-                  <th className="py-3 px-4">Hostel & Block</th>
-                  <th className="py-3 px-4">Allocation Date</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((alloc) => {
-                  const isActive = alloc.Status === 'Active';
-                  return (
-                    <tr key={alloc.AllocationID} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 font-mono font-semibold text-slate-500">
-                        #{alloc.AllocationID}
-                      </td>
+      {/* New Allocation Form */}
+      <div className="p-4 bg-white border border-gray-300 rounded space-y-3">
+        <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+          New Room Allocation Form
+        </h2>
 
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-content-primary text-xs">
-                          {alloc.StudentName}
-                        </div>
-                        <div className="text-[11px] text-brand-blue font-mono">
-                          {alloc.RegNo}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-content-primary">
-                          Room {alloc.RoomNumber}
-                        </div>
-                        <div className="text-[10px] text-content-secondary">
-                          {alloc.RoomType} ({alloc.CurrentOccupancy}/{alloc.Capacity} Beds)
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4 text-content-secondary">
-                        <div>{alloc.HostelName}</div>
-                        <div className="text-[10px] text-slate-400">{alloc.BlockName}</div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="text-content-primary">{alloc.AllocationDate}</div>
-                        {alloc.VacateDate && (
-                          <div className="text-[10px] text-slate-400">
-                            Vacated: {alloc.VacateDate}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <Badge variant={isActive ? 'success' : 'neutral'} size="sm">
-                          {alloc.Status}
-                        </Badge>
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        {isActive && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setAllocToVacate(alloc);
-                              setVacateModalOpen(true);
-                            }}
-                            icon={<LogOut className="w-3.5 h-3.5 text-rose-500" />}
-                          >
-                            Vacate Room
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* NEW ALLOCATION SLIDE-OVER */}
-      <SlideOver
-        isOpen={isNewAllocOpen}
-        onClose={() => setIsNewAllocOpen(false)}
-        title="Assign Room to Resident"
-        subtitle="Capacity-enforced assignment workflow"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setIsNewAllocOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleCreateAllocation} isLoading={isSubmitting}>
-              Confirm Allocation
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleCreateAllocation} className="space-y-4 text-xs">
-          {allocError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{allocError}</span>
-            </div>
-          )}
-
+        <form onSubmit={handleAllocate} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
           <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Select Student *
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Select Student <span className="text-red-500">*</span>
             </label>
             <select
-              required
               value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+              onChange={(e) => setSelectedStudentId(e.target.value ? Number(e.target.value) : '')}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-white"
+              required
             >
-              <option value="">-- Choose Resident --</option>
+              <option value="">-- Choose Student --</option>
               {students.map((st) => (
                 <option key={st.StudentID} value={st.StudentID}>
-                  {st.Name} ({st.RegNo}) — {st.Department}
+                  {st.Name} ({st.RegNo}) {st.RoomNumber ? `[Currently: Room ${st.RoomNumber}]` : ''}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Select Room with Available Capacity *
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Select Room <span className="text-red-500">*</span>
             </label>
             <select
-              required
               value={selectedRoomId}
-              onChange={(e) => setSelectedRoomId(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+              onChange={(e) => setSelectedRoomId(e.target.value ? Number(e.target.value) : '')}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-white"
+              required
             >
-              <option value="">-- Choose Room with Available Bed --</option>
-              {availableRooms.map((rm) => (
-                <option key={rm.RoomID} value={rm.RoomID}>
-                  Room {rm.RoomNumber} ({rm.RoomType}) — {rm.HostelName} ({rm.CurrentOccupancy}/{rm.Capacity} Beds Occupied)
+              <option value="">-- Choose Available Room --</option>
+              {availableRooms.map((r) => (
+                <option key={r.RoomID} value={r.RoomID}>
+                  Room {r.RoomNumber} - {r.BlockName} ({r.HostelName}) [{r.Capacity - r.CurrentOccupancy} free]
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-content-secondary mt-1">
-              {availableRooms.length} rooms currently have verified bed vacancies.
-            </p>
           </div>
 
           <div>
-            <label className="block font-semibold text-content-primary mb-1">
-              Allocation Date *
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Allocation Date <span className="text-red-500">*</span>
             </label>
             <input
               type="date"
-              required
               value={allocationDate}
               onChange={(e) => setAllocationDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-surface-border bg-white text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded"
+              required
             />
           </div>
 
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-[11px]">
-            <strong>Validation Rule:</strong> Overbooking is prevented at the database layer. If a room has 0 vacancies or is under maintenance, allocation will be rejected.
+          <div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Allocating...' : 'Allocate Room'}
+            </button>
           </div>
         </form>
-      </SlideOver>
+      </div>
 
-      {/* VACATE MODAL */}
-      <Modal
-        isOpen={vacateModalOpen}
-        onClose={() => setVacateModalOpen(false)}
-        title="Confirm Room Vacate"
-        maxWidth="sm"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setVacateModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleVacateConfirm}
-              isLoading={isVacating}
-            >
-              Vacate & Release Bed
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 text-xs">
-          <p className="text-content-secondary">
-            Are you sure you want to mark Allocation #{allocToVacate?.AllocationID} for{' '}
-            <strong className="text-content-primary">{allocToVacate?.StudentName}</strong> as vacated?
-          </p>
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-content-secondary">
-            Bed in <strong>Room {allocToVacate?.RoomNumber}</strong> will immediately become available for new allocations.
+      {/* Allocations Filter */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+          Current Allocation Records ({allocations.length})
+        </h2>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-600 font-medium">Status Filter:</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Vacated">Vacated</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Allocations Table */}
+      <div className="bg-white border border-gray-300 rounded overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 font-semibold">
+                <th className="py-2.5 px-3 border-r border-gray-300 w-16 text-center">Alloc ID</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Student Name</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Reg No</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Room</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Block</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Hostel</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Date Allocated</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Date Vacated</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 text-center">Status</th>
+                <th className="py-2.5 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={10} className="py-6 text-center text-gray-500">
+                    Loading allocation records from Neo4j...
+                  </td>
+                </tr>
+              ) : allocations.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-6 text-center text-gray-500">
+                    No allocation records found.
+                  </td>
+                </tr>
+              ) : (
+                allocations.map((a) => (
+                  <tr key={a.AllocationID} className="hover:bg-gray-50">
+                    <td className="py-2 px-3 text-center font-mono text-gray-500 border-r border-gray-200">
+                      {a.AllocationID}
+                    </td>
+                    <td className="py-2 px-3 font-semibold text-gray-900 border-r border-gray-200">
+                      {a.StudentName}
+                    </td>
+                    <td className="py-2 px-3 font-mono text-blue-700 border-r border-gray-200">
+                      {a.RegNo}
+                    </td>
+                    <td className="py-2 px-3 text-gray-800 border-r border-gray-200">
+                      Room {a.RoomNumber}
+                    </td>
+                    <td className="py-2 px-3 text-gray-700 border-r border-gray-200">
+                      {a.BlockName}
+                    </td>
+                    <td className="py-2 px-3 text-gray-700 border-r border-gray-200">
+                      {a.HostelName}
+                    </td>
+                    <td className="py-2 px-3 text-gray-600 border-r border-gray-200">
+                      {a.AllocationDate}
+                    </td>
+                    <td className="py-2 px-3 text-gray-500 border-r border-gray-200">
+                      {a.VacateDate || '—'}
+                    </td>
+                    <td className="py-2 px-3 text-center border-r border-gray-200">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium border ${
+                          a.Status === 'Active'
+                            ? 'bg-green-50 text-green-800 border-green-300'
+                            : 'bg-gray-100 text-gray-700 border-gray-300'
+                        }`}
+                      >
+                        {a.Status}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      {a.Status === 'Active' ? (
+                        <button
+                          onClick={() => setVacateTarget(a)}
+                          className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs hover:bg-red-100"
+                        >
+                          Vacate
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 italic text-[11px]">Completed</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Vacate Confirmation Modal */}
+      {vacateTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-400 rounded max-w-sm w-full p-4 space-y-3 shadow-sm">
+            <h2 className="text-sm font-bold text-gray-900 border-b border-gray-200 pb-2">
+              Confirm Vacate Room
+            </h2>
+            <p className="text-xs text-gray-700">
+              Are you sure you want to vacate Room <strong>{vacateTarget.RoomNumber}</strong> for student{' '}
+              <strong>{vacateTarget.StudentName}</strong> ({vacateTarget.RegNo})?
+            </p>
+            <p className="text-[11px] text-gray-500">
+              This will update the allocation status to &apos;Vacated&apos; and reduce the room&apos;s current occupancy count in Neo4j.
+            </p>
+
+            <div className="border-t border-gray-200 pt-2 flex justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setVacateTarget(null)}
+                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isVacating}
+                onClick={handleVacateConfirm}
+                className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {isVacating ? 'Vacating...' : 'Confirm Vacate'}
+              </button>
+            </div>
           </div>
         </div>
-      </Modal>
+      )}
     </div>
   );
 };
+export default AllocationsPage;

@@ -1,7 +1,4 @@
 import React from 'react';
-import { Users2, Award, BookOpen, Database, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
 
 interface TeamMember {
   sNo: number;
@@ -37,128 +34,84 @@ const TEAM_MEMBERS: TeamMember[] = [
 
 export const TeamPage: React.FC = () => {
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-gray-200">
+    <div className="space-y-6 max-w-4xl">
+      {/* Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-300 gap-2">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold tracking-tight text-gray-900">
-              Project Team & Academic Attribution
-            </h2>
-            <Badge variant="info" size="sm">
-              BACSE202 DA3
-            </Badge>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Digital Assignment 3 — BACSE202 Database Systems • School of Computer Science & Engineering, VIT Chennai
+          <h1 className="text-lg font-bold text-gray-900">Project Team Details</h1>
+          <p className="text-xs text-gray-500">
+            Digital Assignment 3 — BACSE202 Database Systems • School of Computer Science & Engineering
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Badge variant="success" size="sm">
-            <CheckCircle2 className="w-3 h-3 mr-1 inline" />
-            3 Active Team Members
-          </Badge>
+        <div className="text-xs font-mono text-gray-600 bg-gray-100 border border-gray-300 px-2.5 py-1 rounded">
+          3 Team Members
         </div>
       </div>
 
-      {/* Team Table Card */}
-      <Card className="overflow-hidden border border-gray-200 shadow-none">
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users2 className="w-4 h-4 text-blue-600" />
-            <h3 className="text-sm font-semibold text-gray-900">
-              Project Team Members
-            </h3>
-          </div>
-          <span className="text-[11px] text-gray-500 font-mono">
-            College Hostel Management System
-          </span>
+      {/* Team Members Table */}
+      <div className="bg-white border border-gray-300 rounded overflow-hidden">
+        <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-300">
+          <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+            Team Members Roster
+          </h2>
         </div>
-
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
-                <th className="py-2.5 px-4 w-12 text-center">#</th>
-                <th className="py-2.5 px-4 w-36">Registration Number</th>
-                <th className="py-2.5 px-4">Team Member</th>
-                <th className="py-2.5 px-4 hidden md:table-cell">Department / Program</th>
-                <th className="py-2.5 px-4 text-right">Status</th>
+              <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 font-semibold">
+                <th className="py-2.5 px-3 border-r border-gray-300 w-12 text-center">S.No</th>
+                <th className="py-2.5 px-3 border-r border-gray-300 w-32">Registration No</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Student Name</th>
+                <th className="py-2.5 px-3 border-r border-gray-300">Department / Program</th>
+                <th className="py-2.5 px-3">Project Responsibility</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-xs">
-              {TEAM_MEMBERS.map((member) => (
-                <tr key={member.regNo} className="hover:bg-gray-50/80 transition-colors">
-                  <td className="py-3 px-4 text-center font-mono text-gray-400">
-                    {member.sNo}
+            <tbody className="divide-y divide-gray-200">
+              {TEAM_MEMBERS.map((m) => (
+                <tr key={m.regNo} className="hover:bg-gray-50">
+                  <td className="py-2.5 px-3 text-center font-mono text-gray-500 border-r border-gray-200">
+                    {m.sNo}
                   </td>
-                  <td className="py-3 px-4">
-                    <span className="font-mono font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                      {member.regNo}
-                    </span>
+                  <td className="py-2.5 px-3 font-mono font-bold text-blue-700 border-r border-gray-200">
+                    {m.regNo}
                   </td>
-                  <td className="py-3 px-4">
-                    <span className="font-bold text-gray-900 block text-xs tracking-tight">
-                      {member.name}
-                    </span>
-                    <span className="text-[11px] text-gray-500 md:hidden block mt-0.5">
-                      {member.department}
-                    </span>
+                  <td className="py-2.5 px-3 font-semibold text-gray-900 border-r border-gray-200">
+                    {m.name}
                   </td>
-                  <td className="py-3 px-4 text-gray-600 hidden md:table-cell text-xs">
-                    {member.department}
+                  <td className="py-2.5 px-3 text-gray-700 border-r border-gray-200">
+                    {m.department}
                   </td>
-                  <td className="py-3 px-4 text-right">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
-                      Verified Contributor
-                    </span>
+                  <td className="py-2.5 px-3 text-gray-600">
+                    {m.role}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
-      {/* Project Meta Information Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-4 border border-gray-200 shadow-none">
-          <div className="flex items-center gap-2.5 mb-2">
-            <BookOpen className="w-4 h-4 text-blue-600 shrink-0" />
-            <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">
-              Course Details
-            </h4>
-          </div>
-          <p className="text-xs font-semibold text-gray-800">BACSE202 — Database Systems</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">Digital Assignment 3 (DA-3)</p>
-          <p className="text-[11px] text-gray-500">School of Computer Science & Engineering</p>
-        </Card>
+      {/* Academic Project Details Box */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="p-3 bg-white border border-gray-300 rounded">
+          <div className="text-[11px] font-bold text-gray-600 uppercase">Course Information</div>
+          <div className="text-xs font-semibold text-gray-900 mt-1">BACSE202 — Database Systems</div>
+          <div className="text-[11px] text-gray-500 mt-0.5">Digital Assignment 3 (DA-3) • 10 Marks</div>
+        </div>
 
-        <Card className="p-4 border border-gray-200 shadow-none">
-          <div className="flex items-center gap-2.5 mb-2">
-            <Database className="w-4 h-4 text-blue-600 shrink-0" />
-            <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">
-              Database System
-            </h4>
-          </div>
-          <p className="text-xs font-semibold text-gray-800">Neo4j Property Graph Database</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">Community Server 2026 / Bolt Protocol</p>
-          <p className="text-[11px] text-gray-500">Modern NoSQL Evolution from Oracle DDL</p>
-        </Card>
+        <div className="p-3 bg-white border border-gray-300 rounded">
+          <div className="text-[11px] font-bold text-gray-600 uppercase">Database Technology</div>
+          <div className="text-xs font-semibold text-gray-900 mt-1">Neo4j Property Graph Database</div>
+          <div className="text-[11px] text-gray-500 mt-0.5">Community Edition • Cypher Query Language</div>
+        </div>
 
-        <Card className="p-4 border border-gray-200 shadow-none">
-          <div className="flex items-center gap-2.5 mb-2">
-            <Award className="w-4 h-4 text-blue-600 shrink-0" />
-            <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">
-              Institution
-            </h4>
-          </div>
-          <p className="text-xs font-semibold text-gray-800">Vellore Institute of Technology</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">Chennai Campus, Tamil Nadu, India</p>
-          <p className="text-[11px] text-gray-500">Vandalur-Kelambakkam Road</p>
-        </Card>
+        <div className="p-3 bg-white border border-gray-300 rounded">
+          <div className="text-[11px] font-bold text-gray-600 uppercase">Institution</div>
+          <div className="text-xs font-semibold text-gray-900 mt-1">Vellore Institute of Technology</div>
+          <div className="text-[11px] text-gray-500 mt-0.5">Chennai Campus, Tamil Nadu, India</div>
+        </div>
       </div>
     </div>
   );
 };
+export default TeamPage;
