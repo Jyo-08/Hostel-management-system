@@ -308,3 +308,4 @@ export const RoomsPage: React.FC = () => {
   );
 };
 export default RoomsPage;
+
