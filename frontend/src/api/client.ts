@@ -24,14 +24,14 @@ import {
   GraphData
 } from '../types';
 
-let customBaseUrl = localStorage.getItem('hostelos_api_url') || 'http://localhost:8000';
+import {
+  getApiBaseUrl,
+  setApiBaseUrl,
+  resetApiBaseUrl,
+  PRODUCTION_API_URL
+} from '../config/api';
 
-export const getApiBaseUrl = (): string => customBaseUrl;
-
-export const setApiBaseUrl = (url: string): void => {
-  customBaseUrl = url.replace(/\/+$/, '');
-  localStorage.setItem('hostelos_api_url', customBaseUrl);
-};
+export { getApiBaseUrl, setApiBaseUrl, resetApiBaseUrl, PRODUCTION_API_URL };
 
 export class ApiError extends Error {
   status: number;
@@ -78,7 +78,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       throw err;
     }
     throw new ApiError(
-      `Network error connecting to ${url}. Ensure the FastAPI backend is running on port 8000.`,
+      `Network error connecting to ${url}. Please verify backend service availability and network connectivity.`,
       0,
       err
     );

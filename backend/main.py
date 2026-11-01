@@ -32,18 +32,101 @@ app = FastAPI(
     version="3.0.0"
 )
 
+# Production CORS Configuration
+default_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+]
+
+allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "")
+frontend_url_env = os.environ.get("FRONTEND_URL", "")
+
+allowed_origins = list(default_origins)
+for source in [allowed_origins_env, frontend_url_env]:
+    if source:
+        for origin in source.split(","):
+            cleaned = origin.strip().rstrip("/")
+            if cleaned and cleaned not in allowed_origins:
+                allowed_origins.append(cleaned)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"^https:\/\/.*\.onrender\.com$",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+
+def seed_database_if_empty(force: bool = False) -> bool:
+    """
+    Idempotently checks if the connected Neo4j database is empty and populates schema constraints
+    and records from the authoritative BACSE202 DA1/DA2/DA3 dataset.
+    """
+    try:
+        cnt_res = neo4j_manager.run_query("MATCH (n) RETURN count(n) AS cnt")
+        node_count = cnt_res[0]["cnt"] if cnt_res else 0
+        if node_count == 0 or force:
+            print(f"[SEED] Neo4j has {node_count} nodes. Initializing schema constraints and DA3 dataset...")
+            from setup_neo4j_schema import setup_schema
+            setup_schema()
+
+            db_path = os.path.join(os.path.dirname(__file__), "hostelos.db")
+            if not os.path.exists(db_path):
+                from seed_data import seed
+                seed()
+
+            from seed_neo4j import Neo4jSeeder
+            seeder = Neo4jSeeder(
+                db_path=db_path,
+                uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+                user=os.getenv("NEO4J_USER", "neo4j"),
+                password=os.getenv("NEO4J_PASSWORD", "")
+            )
+            seeder.run()
+            seeder.close()
+            print("[SEED] Neo4j seeding completed successfully.")
+            return True
+        return False
+    except Exception as e:
+        print(f"[SEED ERROR] Failed to seed database: {e}")
+        return False
+
+
+@app.on_event("startup")
+def startup_event():
+    seed_database_if_empty(force=False)
 
 
 @app.on_event("shutdown")
 def shutdown_event():
     neo4j_manager.close()
+
+
+@app.post("/api/seed")
+def trigger_seed(force: bool = False):
+    """
+    Idempotent administrative endpoint to initialize schema constraints and seed the DA3 dataset.
+    """
+    try:
+        res = seed_database_if_empty(force=force)
+        cnt_res = neo4j_manager.run_query("MATCH (n) RETURN count(n) AS cnt")
+        total_nodes = cnt_res[0]["cnt"] if cnt_res else 0
+        return {
+            "status": "success",
+            "action": "seeded" if res else "already_seeded",
+            "total_nodes": total_nodes,
+            "message": f"Neo4j database currently contains {total_nodes} nodes."
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Seeding execution error: {str(e)}"
+        )
 
 
 def cypher_query(query: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:

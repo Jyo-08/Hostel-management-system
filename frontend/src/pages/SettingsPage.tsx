@@ -12,7 +12,7 @@ import {
   Layers,
   ShieldCheck
 } from 'lucide-react';
-import { api, getApiBaseUrl, setApiBaseUrl } from '../api/client';
+import { api, getApiBaseUrl, setApiBaseUrl, resetApiBaseUrl, PRODUCTION_API_URL } from '../api/client';
 import { SystemHealth } from '../types';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -82,17 +82,30 @@ export const SettingsPage: React.FC = () => {
           Base URL for the Python FastAPI server powering HostelOS.
         </p>
 
-        <form onSubmit={handleSaveUrl} className="flex items-center gap-2">
+        <form onSubmit={handleSaveUrl} className="flex flex-wrap items-center gap-2">
           <input
             type="text"
             required
-            placeholder="http://localhost:8000"
+            placeholder={PRODUCTION_API_URL}
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
-            className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="flex-1 min-w-[260px] px-3 py-1.5 text-xs rounded border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
           <Button type="submit" size="sm" isLoading={isTesting} icon={<Save className="w-3.5 h-3.5" />}>
             Test & Save
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              resetApiBaseUrl();
+              setApiUrl(PRODUCTION_API_URL);
+              setApiBaseUrl(PRODUCTION_API_URL);
+              testConnection();
+            }}
+          >
+            Reset Default
           </Button>
         </form>
 
